@@ -1,0 +1,14 @@
+{
+    "//google": "Full filesystem path to a Google project credentials JSON file with vision and translate APIs.",
+    "google": "",
+    "//openai": "API key for OpenAI",
+    "openai": "",
+    "//vision": "Optional, default 'openai'. Vision backend to use, either 'google' (for Google Vision) or 'openai' (for ChatGPT).",
+    "vision": "openai",
+    "//inNewline": "Optional, default '\n'. Convert newlines given by OCR to this string. Useful if input may have words split over newlines, which some translators choke on.",
+    "inNewline": "\n",
+    "//outNewline": "Optional, default '\n'. Convert newlines in the output to this string. Useful simply to save space.",
+    "outNewline": "\n",
+    "//from": "Language code to translate from, e.g. 'zh' for Chinese.",
+    "from": "zh"
+}

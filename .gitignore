@@ -1,0 +1,6 @@
+*.png
+
+chat.json
+config.json
+node_modules
+ocr.txt
