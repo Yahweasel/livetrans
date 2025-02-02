@@ -29,7 +29,7 @@ rm -f /tmp/livetrans.fifo ; mkfifo /tmp/livetrans.fifo
 # upscaled raw.
 process() {
     #./separate-lines.js "$1" in1.png
-    #ffmpeg -i in1.png -vf scale=-1:ih/3,hqx -y "$2"
+    #ffmpeg -i in1.png -vf scale=-1:ih/3,hqx -y "$2" > /dev/null 2>&1
     mv "$1" "$2"
 }
 
