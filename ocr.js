@@ -46,7 +46,7 @@ async function openAIVision() {
 
     const img = new Sharp("in.png");
     const jpeg = await img
-        .resize(1280, 720, {fit: "inside"})
+        .resize(512, 512, {fit: "inside"})
         .toFormat("jpeg", {quality: 91})
         .toBuffer();
     const messages = [{
