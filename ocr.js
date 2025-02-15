@@ -19,6 +19,7 @@ const config = require("./config.json");
 process.env.GOOGLE_APPLICATION_CREDENTIALS = config.google;
 
 const fs = require("fs/promises");
+const sc = require("stream/consumers");
 const util = require("util");
 
 const OpenAI = require("openai");
@@ -44,7 +45,7 @@ async function openAIVision() {
         apiKey: config.openai
     });
 
-    const img = new Sharp("in.png");
+    const img = new Sharp(await sc.buffer(process.stdin));
     const jpeg = await img
         .resize(512, 512, {fit: "inside"})
         .toFormat("jpeg", {quality: 91})
@@ -90,7 +91,7 @@ async function main() {
 
     } catch (err) {
         console.log("(OCR error)");
-        console.error(err.message);
+        console.log(err.message);
         process.exit(1);
 
     }

@@ -18,10 +18,12 @@
 /* This is a small script to separate lines in an image, for input where the
  * lines of text abut each other, which can confuse OCR. */
 
+const sc = require("stream/consumers");
+
 const sharp = require("sharp");
 
 async function main() {
-    const inpS = sharp(process.argv[2]);
+    const inpS = sharp(await sc.buffer(process.stdin));
     const meta = await inpS.metadata();
     const w = meta.width / 3;
     const h = meta.height / 3;
@@ -45,6 +47,6 @@ async function main() {
         }
     }
 
-    await sharp(outBuf, {raw: {width: w, height: ho, channels: 3}}).toFile(process.argv[3]);
+    await sharp(outBuf, {raw: {width: w, height: ho, channels: 3}}).png().pipe(process.stdout);
 }
 main();

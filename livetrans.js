@@ -15,132 +15,156 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-const config = require("./config.json");
-process.env.GOOGLE_APPLICATION_CREDENTIALS = config.google;
+// This is a wrapper to perform live translation with commands given to stdin.
 
+const cproc = require("child_process");
 const fs = require("fs/promises");
-const util = require("util");
-const {Translate} = require('@google-cloud/translate').v2;
-const gtranslate = new Translate({projectId: "yahweasel-live-translation"});
-const OpenAI = require("openai");
-const wrap = require("word-wrap");
+const rl = require("readline/promises");
 
-const openai = new OpenAI({
-    apiKey: config.openai
-});
-const openAIModel = "gpt-4o";
+const clear = "\x1b[H\x1b[2J\x1b[3J";
 
-async function main() {
-    try {
-        const ocr = await fs.readFile("ocr.txt", "utf8");
+// Set up the window
+process.stdout.write("\x1b[m\x1b[97m\x1b]2;Live Translation\x07\x1b[?25l" + clear);
 
-        /* Start the Google Translate promise in advance so they can run at the
-         * same time. */
-        const gTransP = gtranslate.translate(ocr, {from: config.from, to: "en"});
+// Generic program runner
+async function run(cmd, args, opts = {}) {
+    const p = cproc.spawn(cmd, args, {
+        stdio: [
+            opts.stdin ? "pipe" : "ignore",
+            opts.stdout ? "pipe" : "inherit",
+            "ignore"
+        ]
+    });
+    if (opts.stdin)
+        p.stdin.end(opts.stdin);
 
-        // Prepare OpenAI
-        let log = {tokens: [], messages: []};
-        let messages = log.messages;
-        try {
-            log = JSON.parse(await fs.readFile("chat.json", "utf8"));
-            messages = log.messages;
-        } catch (ex) {}
+    const exitP = new Promise(res => p.on("exit", res));
 
-        let completion;
-        if (messages.length === 0) {
-            // Prime it with the instructions
-            messages.push({
-                role: "user",
-                content: "I am going to give you a sequence of lines of text from a video game. Please translate them into English. Note that this text was created by OCR; if there appear to be any OCR errors, correct for them in your translation. Do you understand?"
+    let ret;
+    if (opts.stdout) {
+        ret = [];
+        p.stdout.on("data", chunk => ret.push(chunk));
+        ret = await new Promise(res => {
+            p.stdout.on("end", () => {
+                res(Buffer.concat(ret));
             });
-            completion = await openai.chat.completions.create({
-                model: openAIModel,
-                messages
-            });
-            messages.push(completion.choices[0].message);
-            log.tokens = [
-                completion.usage.prompt_tokens,
-                completion.usage.completion_tokens
-            ];
-        }
-
-        // How many tokens have we used so far?
-        let totalTokens = 0;
-        for (const count of log.tokens)
-            totalTokens += count;
-
-        // If it's gotten too long, cut it off
-        while (totalTokens >= 1000 && messages.length > 4) {
-            totalTokens -= log.tokens[2] + log.tokens[3];
-            log.tokens.splice(2, 2);
-            messages.splice(2, 2);
-        }
-
-        // Now add this line
-        messages.push({
-            role: "user",
-            content: ocr
         });
-
-        // And "translate"
-        let translation;
-        for (let i = 0; i < 3; i++) {
-            completion = await Promise.race([
-                openai.chat.completions.create({
-                    model: openAIModel,
-                    messages
-                }),
-                new Promise(res => setTimeout(() => res(null), 10000))
-            ]);
-            if (!completion) {
-                translation = "(Timeout)";
-                break;
-            }
-            translation = completion.choices[0].message.content;
-
-            // Check for likely failures
-            const lc = translation.toLowerCase();
-            if (lc[0] !== '"' && lc.indexOf("english") === -1 &&
-                lc.indexOf("translation") === -1) {
-                break;
-            }
-        }
-
-        // Save the chat log
-        if (completion) {
-            log.tokens.push(
-                completion.usage.prompt_tokens - totalTokens);
-            messages.push(completion.choices[0].message);
-            log.tokens.push(
-                completion.usage.completion_tokens);
-            await fs.writeFile("chat.json", JSON.stringify(log));
-        }
-
-        translation = translation.replace(/\n/g, config.outNewline || "\n");
-
-        // Now get the Google translation
-        const gTrans = await gTransP;
-        const gText = gTrans[0].replace(/\n/g, config.outNewline || "\n");
-
-        // And output
-        const ocrNl = ocr.replace(/\n/g, config.outNewline || "\n");
-        const width = (process.stdout.columns || 80) - 1;
-        const indent = "";
-        process.stdout.write(ocrNl + "\n⇒\n" +
-            wrap(translation, {width, indent}) + "\n\n" +
-            wrap("⟦" + gText + "⟧", {width, indent}) + "\n\n");
-
-        if (translation === "(Timeout)")
-            process.exit(1);
-        else
-            process.exit(0);
-
-    } catch (err) {
-        console.log("(Translation error)");
-        console.log(err.message);
-        process.exit(1);
-
     }
+
+    await exitP;
+    return ret;
 }
 
+let procQueue = Promise.all([]);
+let queueLen = 0;
+
+// Run this function in the queue
+function enqueue(cmd, args, opts) {
+    queueLen++;
+
+    process.stdout.write(clear + "...");
+    if (queueLen > 1)
+        process.stdout.write(` (${queueLen})`);
+
+    procQueue = procQueue.catch(()=>{}).then(async () => {
+        let stdout;
+        try {
+            stdout = await run(cmd, args, opts);
+        } catch (ex) {}
+
+        if (--queueLen <= 0) {
+            process.stdout.write(clear);
+            if (stdout)
+                process.stdout.write(stdout);
+        } else {
+            process.stdout.write(clear + "...");
+            if (queueLen > 1)
+                process.stdout.write(` (${queueLen})`);
+        }
+    });
+
+    return procQueue;
+}
+
+/* Process raw input into OCR-able output. By default, just moves inp to outp,
+ * but some comments are left here for processing steps I've found to be useful.
+ * separate-lines is a simple tool that separates abutting lines, which is
+ * useful if the location of text lines is predictable, but there's no space
+ * between them. The given ffmpeg line is to upscale using hqx, if your input is
+ * upscaled raw. */
+async function imgProcess(inp) {
+    let outp = inp;
+    //outp = await run("./separate-lines.js", [], {stdin: outp, stdout: true});
+    //outp = await run("ffmpeg", ["-i", "-", "-vf", "scale=-1:ih/3,hqx", "-f", "image2pipe", "-c:v", "png", "-"], {stdin: outp, stdout: true});
+    return outp;
+}
+
+async function main() {
+    const winID = (await run("xdotool", ["selectwindow"], {stdout: true})).toString("utf8").trim();
+
+    const stdin = rl.createInterface({
+        input: process.stdin,
+        crlfDelay: 1/0
+    });
+
+    for await (let cmd of stdin) {
+        cmd = cmd.trim();
+
+        let img;
+        if (cmd === "t" || cmd === "b") {
+            img = await run("import", ["-window", winID, "png:-"], {stdout: true});
+            img = await imgProcess(img);
+        }
+
+        /*
+         * COMMANDS:
+         * o: OCR an input image. Reads the input image using scrot, so that the user
+         *    can select the area they wish to OCR.
+         * t, b: OCR part of the window selected with xdotool above. Theoretically
+         *       these mean "top" and "bottom", but any actual cropping needs to be
+         *       added below.
+         * T: Translate whatever has been captured by OCR.
+         * c: Clear the screen and any buffered OCR input.
+         */
+        switch (cmd) {
+            case "o":
+                img = await run("scrot", ["-fs", "-"], {stdout: true});
+                img = await imgProcess(img);
+                enqueue("./ocr.js", [], {stdin: img, stdout: true});
+                break;
+
+            case "t":
+                //img = await run("convert", ["-", "-crop", "100x100+100+100", "png:-"], {stdin: img, stdout: true});
+                enqueue("./ocr.js", [], {stdin: img, stdout: true});
+                break;
+
+            case "b":
+                //img = await run("convert", ["-", "-crop", "100x100+100+100", "png:-"], {stdin: img, stdout: true});
+                enqueue("./ocr.js", [], {stdin: img, stdout: true});
+                break;
+
+            case "T":
+                try {
+                    await fs.access("ocr.txt");
+                    (async function() {
+                        try {
+                            await enqueue("./trans.js", [], {stdout: true});
+                            await fs.unlink("ocr.txt");
+                        } catch (ex) {}
+                    })();
+                } catch (ex) {}
+                break;
+
+            case "c":
+                process.stdout.write(clear);
+                try {
+                    await fs.unlink("ocr.txt");
+                } catch (ex) {}
+                break;
+
+            default:
+                process.stdout.write(clear);
+        }
+    }
+}
 main();
