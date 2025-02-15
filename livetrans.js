@@ -128,7 +128,11 @@ async function main() {
          */
         switch (cmd) {
             case "o":
-                img = await run("scrot", ["-fs", "-"], {stdout: true});
+                try {
+                    await fs.unlink("tmp.png");
+                } catch (ex) {}
+                await run("scrot", ["-fs", "tmp.png"]);
+                img = await fs.readFile("tmp.png");
                 img = await imgProcess(img);
                 enqueue("./ocr.js", [], {stdin: img, stdout: true});
                 break;
