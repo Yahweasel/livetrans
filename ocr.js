@@ -32,6 +32,8 @@ const openAIModel = "gpt-4o";
  * OCR in.png using Google Vision.
  */
 async function googleVision() {
+    const img = await sc.buffer(process.stdin);
+    await fs.writeFile("in.png", img);
     const vclient = new vision.ImageAnnotatorClient();
     const ocrR = await vclient.textDetection("in.png");
     return ocrR[0].fullTextAnnotation.text;
