@@ -124,7 +124,7 @@ async function main() {
 
         // And output
         const ocrNl = ocr.replace(/\n/g, config.outNewline || "\n");
-        const width = (process.stdout.columns || 80) - 1;
+        const width = (+process.env.COLUMNS || process.stdout.columns || 80) - 1;
         const indent = "";
         process.stdout.write(ocrNl + "\n⇒\n" +
             wrap(translation, {width, indent}) + "\n\n" +
