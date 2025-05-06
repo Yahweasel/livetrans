@@ -1,14 +1,43 @@
 {
     "//google": "Full filesystem path to a Google project credentials JSON file with vision and translate APIs.",
     "google": "",
+
+    "//googleProjectId": "Project ID for the Google API project to use.",
+    "googleProjectId": "",
+
     "//openai": "API key for OpenAI",
-    "openai": "",
-    "//vision": "Optional, default 'openai'. Vision backend to use, either 'google' (for Google Vision) or 'openai' (for ChatGPT).",
+    "openai": "none",
+
+    "//vision": "Optional, default 'openai'. Vision backend to use, either 'google' (for Google Vision) or 'openai' (for ChatGPT or anything else using OpenAI API).",
     "vision": "openai",
+
     "//inNewline": "Optional, default '\n'. Convert newlines given by OCR to this string. Useful if input may have words split over newlines, which some translators choke on.",
     "inNewline": "\n",
+
     "//outNewline": "Optional, default '\n'. Convert newlines in the output to this string. Useful simply to save space.",
     "outNewline": "\n",
-    "//from": "Language code to translate from, e.g. 'zh' for Chinese.",
-    "from": "zh"
+
+    "//from": "Language code to translate from, e.g. 'zh' for Chinese. Only needed for Google Translate.",
+    "from": "zh",
+
+    "//visionBaseURL": "baseURL setting for vision (OCR) if OpenAI API is used.",
+    "visionBaseURL": "http://localhost:8000/v1",
+
+    "//visionModel": "Model to use for vision (OCR) if OpenAI API is used.",
+    "visionModel": "livetrans:qwen2.5vl2",
+
+    "//visionRequest": "Text of the request to make to the vision model, to override.",
+    "visionRequest": "",
+
+    "//translationBaseURL": "baseURL setting for translation.",
+    "translationBaseURL": "http://localhost:8000/v1",
+
+    "//translationModel": "Model to use for translation.",
+    "translationModel": "livetrans:qwen3-14b",
+
+    "//translationRequestSuffix": "Suffix to add to the translation request. Useful for e.g. Qwen3's /no_think suffix.",
+    "translationRequestSuffix": " /no_think",
+
+    "//translationTimeout": "Timeout in milliseconds before rejecting translation.",
+    "translationTimeout": 30000
 }

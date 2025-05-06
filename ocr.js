@@ -26,7 +26,10 @@ const OpenAI = require("openai");
 const vision = require("@google-cloud/vision");
 const Sharp = require("sharp");
 
-const openAIModel = "gpt-4o";
+const defaultOpenAIModel = "gpt-4o";
+const request =
+    config.visionRequest ||
+    "Please transcribe the text in this image, in any language. Only give me the transcription, no other context.";
 
 /**
  * OCR in.png using Google Vision.
@@ -44,8 +47,10 @@ async function googleVision() {
  */
 async function openAIVision() {
     const openai = new OpenAI({
-        apiKey: config.openai
+        apiKey: config.openai,
+        baseURL: config.visionBaseURL || void 0
     });
+    const model = config.visionModel || defaultOpenAIModel;
 
     const img = new Sharp(await sc.buffer(process.stdin));
     const jpeg = await img
@@ -55,7 +60,7 @@ async function openAIVision() {
     const messages = [{
         role: "user",
         content: [
-            {type: "text", text: "Please transcribe the text in this image, in any language. Only give me the transcription, no other context."},
+            {type: "text", text: request},
             {
                 type: "image_url",
                 image_url: {url: "data:image/jpeg;base64," + jpeg.toString("base64")}
@@ -63,10 +68,11 @@ async function openAIVision() {
         ]
     }];
     completion = await openai.chat.completions.create({
-        model: openAIModel,
+        model,
         messages
     });
-    return completion.choices[0].message.content;
+    const msg = completion.choices[0].message;
+    return msg.content.replace(/^<think>[\s\S]*<\/think>\s*/, "");
 }
 
 async function main() {
